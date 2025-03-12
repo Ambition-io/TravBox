@@ -491,10 +491,11 @@ config_management() {
     echo "1) 修改仓库URL"
     echo "2) 恢复默认配置"
     echo "3) 自定义框架快捷名称"
+    echo "4) 切换隐藏/非隐藏安装位置"
     echo "0) 返回上一级菜单"
     echo ""
     
-    read -p "请选择 [0-3]: " choice
+    read -p "请选择 [0-4]: " choice
     
     case $choice in
         1)
@@ -551,6 +552,11 @@ EOF
             
             print_success "快捷名称已更新为: $new_name"
             ;;
+
+        4)
+            toggle_visibility
+            ;;
+
         0)
             return
             ;;
@@ -563,7 +569,73 @@ EOF
     press_enter
 }
 
-# ==================== 新的插件管理功能 ====================
+# 切换隐藏/非隐藏状态
+toggle_visibility() {
+    print_title
+    echo -e "${YELLOW}切换安装位置可见性:${RESET}"
+    
+    # 确定当前状态和目标状态
+    local current_location="$SCRIPT_DIR"
+    local is_hidden=true
+    local target_location=""
+    local status_text=""
+    
+    if [[ "$SCRIPT_DIR" == "$HOME/.travbox" ]]; then
+        is_hidden=true
+        target_location="$HOME/TravBox"
+        status_text="当前使用隐藏文件夹 ($HOME/.travbox)，将切换到可见文件夹"
+    else
+        is_hidden=false
+        target_location="$HOME/.travbox"
+        status_text="当前使用可见文件夹 ($SCRIPT_DIR)，将切换到隐藏文件夹"
+    fi
+    
+    echo "$status_text"
+    echo -e "${RED}警告: 此操作将移动框架文件并修改配置${RESET}"
+    echo ""
+    
+    read -p "确认要切换安装位置吗? (y/n): " confirm
+    if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
+        print_warning "操作已取消"
+        press_enter
+        return
+    fi
+    
+    # 检查目标位置是否已存在
+    if [ -d "$target_location" ]; then
+        print_error "目标位置 $target_location 已存在，无法切换"
+        print_warning "请先删除或重命名该目录"
+        press_enter
+        return
+    fi
+    
+    print_info "正在切换安装位置..."
+    
+    # 修改主脚本中的SCRIPT_DIR变量
+    local current_script="$(realpath "$0")"
+    if [[ "$is_hidden" == true ]]; then
+        # 从隐藏切换到可见
+        sed -i "s|SCRIPT_DIR=\"\$HOME/.travbox\"|SCRIPT_DIR=\"\$HOME/TravBox\"|g" "$current_script"
+    else
+        # 从可见切换到隐藏
+        sed -i "s|SCRIPT_DIR=\"\$HOME/TravBox\"|SCRIPT_DIR=\"\$HOME/.travbox\"|g" "$current_script"
+    fi
+    
+    # 移动目录
+    mv "$current_location" "$target_location"
+    
+    # 更新框架快捷链接
+    SCRIPT_DIR="$target_location"
+    update_framework_shortcut
+    
+    print_success "安装位置已成功切换到: $target_location"
+    print_info "请重新启动框架以应用所有更改"
+    
+    # 退出以确保所有更改生效
+    exit 0
+}
+
+# ==================== 插件管理功能 ====================
 
 # 插件管理菜单
 plugin_management() {
