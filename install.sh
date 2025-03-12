@@ -81,11 +81,11 @@ main() {
     # 如果选择非隐藏文件夹，需要修改主脚本中的SCRIPT_DIR变量
     if [ "$INSTALL_DIR" == "$HOME/TravBox" ]; then
         print_info "配置为非隐藏安装..."
-        sed -i "s|SCRIPT_DIR=\"\$HOME/.travbox\"|SCRIPT_DIR=\"\$HOME/TravBox\"|g" "$INSTALL_DIR/traverse.sh"
+        sed -i "s|SCRIPT_DIR=\"\$HOME/.travbox\"|SCRIPT_DIR=\"\$HOME/TravBox\"|g" "$INSTALL_DIR/start.sh"
     fi
     
     # 设置执行权限
-    chmod +x "$INSTALL_DIR/traverse.sh"
+    chmod +x "$INSTALL_DIR/start.sh"
     
     # 创建.initialized标记文件
     touch "$INSTALL_DIR/.initialized"
@@ -99,7 +99,7 @@ main() {
         # 创建快捷方式
         cat > "$PREFIX/bin/travbox" << EOF
 #!/data/data/com.termux/files/usr/bin/bash
-exec "$INSTALL_DIR/traverse.sh" "\$@"
+exec "$INSTALL_DIR/start.sh" "\$@"
 EOF
         chmod +x "$PREFIX/bin/travbox"
         print_success "快捷方式已创建，现在可以直接使用'travbox'命令启动"
@@ -108,7 +108,7 @@ EOF
     # 询问是否立即运行
     read -p "立即运行TravBox? (y/n): " run_now
     if [[ "$run_now" =~ ^[Yy]$ ]]; then
-        exec "$INSTALL_DIR/traverse.sh"
+        exec "$INSTALL_DIR/start.sh"
     else
         echo -e "${GREEN}安装完成，感谢使用!${RESET}"
     fi
