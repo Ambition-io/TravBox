@@ -283,7 +283,7 @@ install_basic_environment() {
 uninstall_menu() {
     print_title
     echo -e "${YELLOW}卸载选项:${RESET}"
-    echo "1) 卸载插件"
+    echo "1) 卸载软件包"
     echo "2) 卸载整个框架"
     echo "0) 返回上一级菜单"
     echo ""
@@ -291,7 +291,7 @@ uninstall_menu() {
     read -p "请选择 [0-2]: " choice
     
     case $choice in
-        1) uninstall_extension ;;
+        1) uninstall_package ;;
         2) uninstall_framework ;;
         0) return ;;
         *) 
@@ -302,17 +302,17 @@ uninstall_menu() {
     esac
 }
 
-# 卸载插件
-uninstall_extension() {
+# 卸载软件包
+uninstall_package() {
     print_title
-    echo -e "${YELLOW}可卸载的插件:${RESET}"
+    echo -e "${YELLOW}可卸载的软件包:${RESET}"
     
     # 初始化目录变量
     init_pinned_directory
     
     local scripts=($(scan_installed_scripts))
     if [ ${#scripts[@]} -eq 0 ]; then
-        print_warning "没有找到可卸载的插件"
+        print_warning "没有找到可卸载的软件包"
         press_enter
         return
     fi
@@ -330,7 +330,7 @@ uninstall_extension() {
     echo "0) 返回上一级菜单"
     echo ""
     
-    read -p "请选择要卸载的插件 [0-$((i-1))]: " choice
+    read -p "请选择要卸载的软件包 [0-$((i-1))]: " choice
     
     if [[ $choice -eq 0 ]]; then
         uninstall_menu
@@ -339,7 +339,7 @@ uninstall_extension() {
         local script_path="${script_map[$choice]}"
         local script_name=$(basename "$script_path")
         
-        read -p "确定要卸载插件 '$script_name'? (y/n): " confirm
+        read -p "确定要卸载软件包 '$script_name'? (y/n): " confirm
         if [[ "$confirm" =~ ^[Yy]$ ]]; then
             # 移除固定列表中的项目
             if [ -f "$PINNED_FILE" ]; then
@@ -353,7 +353,7 @@ uninstall_extension() {
             
             # 删除脚本文件
             rm -f "$script_path"
-            print_success "插件 '$script_name' 已成功卸载"
+            print_success "软件包 '$script_name' 已成功卸载"
         else
             print_warning "卸载已取消"
         fi
@@ -369,7 +369,7 @@ uninstall_extension() {
 uninstall_framework() {
     print_title
     echo -e "${RED}警告: 此操作将卸载整个Termux集成脚本框架${RESET}"
-    echo "包括所有插件和配置。"
+    echo "包括所有软件包和配置。"
     echo ""
     
     read -p "确定要卸载整个框架? (y/n): " confirm
@@ -389,7 +389,7 @@ uninstall_framework() {
         # 移除框架别名
         sed -i "/alias $framework_alias=/d" "$bashrc"
         
-        # 移除所有插件别名行（以"# Traverse script alias:"标记的行）
+        # 移除所有软件包别名行（以"# Traverse script alias:"标记的行）
         sed -i '/# Traverse script alias:/d' "$bashrc"
     fi
     
@@ -408,10 +408,10 @@ execute_script() {
     local script="$1"
     
     if [ -f "$script" ] && [ -x "$script" ]; then
-        print_info "执行插件: $(basename "$script")"
+        print_info "执行软件包: $(basename "$script")"
         "$script"
     else
-        print_error "插件不存在或没有执行权限"
+        print_error "软件包不存在或没有执行权限"
     fi
     
     press_enter
@@ -451,16 +451,16 @@ show_version_info() {
     echo "安装路径: $SCRIPT_DIR"
     
     local script_count=$(find "$SCRIPTS_DIR" -type f -name "*.sh" | wc -l)
-    echo "已安装插件: $script_count"
+    echo "已安装软件包: $script_count"
     
-    # 初始化固定插件目录
+    # 初始化固定软件包目录
     init_pinned_directory
     
     if [ -f "$PINNED_FILE" ]; then
         local pinned_count=$(wc -l < "$PINNED_FILE")
-        echo "已固定插件: $pinned_count"
+        echo "已固定软件包: $pinned_count"
     else
-        echo "已固定插件: 0"
+        echo "已固定软件包: 0"
     fi
     
     local init_file="$SCRIPT_DIR/.initialized"
@@ -576,9 +576,9 @@ EOF
     press_enter
 }
 
-# ==================== 新的插件管理功能 ====================
+# ==================== 软件包管理功能 ====================
 
-# 初始化固定插件目录
+# 初始化固定软件包目录
 init_pinned_directory() {
     PINNED_DIR="$SCRIPT_DIR/pinned"
     PINNED_FILE="$PINNED_DIR/scripts.list"
@@ -587,28 +587,28 @@ init_pinned_directory() {
     mkdir -p "$PINNED_DIR"
 }
 
-# 插件管理菜单
-plugin_management() {
-    # 初始化固定插件目录
+# 软件包管理菜单
+package_management() {
+    # 初始化固定软件包目录
     init_pinned_directory
     
     while true; do
         print_title
-        echo -e "${YELLOW}插件管理:${RESET}"
-        echo "1) 已安装插件列表"
-        echo "2) 安装新插件"
+        echo -e "${YELLOW}软件包管理:${RESET}"
+        echo "1) 已安装软件包列表"
+        echo "2) 安装新软件包"
         echo "3) 管理别名"
-        echo "4) 管理主页固定插件" 
+        echo "4) 管理主页固定软件包" 
         echo "0) 返回主菜单"
         echo ""
         
         read -p "请选择 [0-4]: " choice
         
         case $choice in
-            1) show_installed_plugins ;;
-            2) install_new_plugins ;;
+            1) show_installed_packages ;;
+            2) install_new_packages ;;
             3) manage_aliases ;;
-            4) manage_pinned_plugins ;;
+            4) manage_pinned_packages ;;
             0) return ;;
             *) 
                 print_error "无效选项"
@@ -618,14 +618,14 @@ plugin_management() {
     done
 }
 
-# 显示已安装插件
-show_installed_plugins() {
+# 显示已安装软件包
+show_installed_packages() {
     print_title
-    echo -e "${YELLOW}已安装插件列表:${RESET}"
+    echo -e "${YELLOW}已安装软件包列表:${RESET}"
     
     local scripts=($(scan_installed_scripts))
     if [ ${#scripts[@]} -eq 0 ]; then
-        print_warning "没有找到已安装的插件"
+        print_warning "没有找到已安装的软件包"
         press_enter
         return
     fi
@@ -643,7 +643,7 @@ show_installed_plugins() {
     echo "0) 返回上一级菜单"
     echo ""
     
-    read -p "请选择要执行的插件 [0-$((i-1))]: " choice
+    read -p "请选择要执行的软件包 [0-$((i-1))]: " choice
     
     if [[ $choice -eq 0 ]]; then
         return
@@ -655,26 +655,26 @@ show_installed_plugins() {
     fi
 }
 
-# 从仓库安装新插件
-install_new_plugins() {
+# 从仓库安装新软件包
+install_new_packages() {
     print_title
-    echo -e "${YELLOW}安装新插件:${RESET}"
+    echo -e "${YELLOW}安装新软件包:${RESET}"
     
     # 检查依赖
     check_dependencies
     
-    # 首先确保仓库已克隆，以便查看可用插件
+    # 首先确保仓库已克隆，以便查看可用软件包
     if [ ! -d "$SCRIPTS_DIR/.git" ]; then
-        print_info "正在获取可用插件列表..."
+        print_info "正在获取可用软件包列表..."
         
         local temp_dir="/data/data/com.termux/files/usr/tmp/scripts_temp_$$"
         mkdir -p "$temp_dir"
         
-        # 克隆仓库以获取最新插件
+        # 克隆仓库以获取最新软件包
         GIT_TERMINAL_PROMPT=0 git clone "$REPO_URL" "$temp_dir" 2>/dev/null
         
         if [ $? -ne 0 ]; then
-            print_error "无法连接到插件仓库，请检查网络或仓库地址"
+            print_error "无法连接到软件包仓库，请检查网络或仓库地址"
             rm -rf "$temp_dir"
             press_enter
             return
@@ -685,17 +685,17 @@ install_new_plugins() {
             temp_dir="$temp_dir/scripts"
         fi
     else
-        print_info "正在更新可用插件列表..."
+        print_info "正在更新可用软件包列表..."
         # 仓库已存在，执行pull操作
         cd "$SCRIPTS_DIR"
         GIT_TERMINAL_PROMPT=0 git pull 2>/dev/null
         temp_dir="$SCRIPTS_DIR"
     fi
     
-    # 扫描可用插件
-    local available_plugins=()
+    # 扫描可用软件包
+    local available_packages=()
     local i=1
-    declare -A plugin_map
+    declare -A package_map
     
     while IFS= read -r script; do
         if [ -f "$script" ]; then
@@ -707,13 +707,13 @@ install_new_plugins() {
             fi
             
             echo "$i) $desc ($(basename "$script"))"
-            plugin_map[$i]="$script"
+            package_map[$i]="$script"
             ((i++))
         fi
     done < <(find "$temp_dir" -type f -name "*.sh")
     
     if [ $i -eq 1 ]; then
-        print_warning "仓库中没有找到可用的插件"
+        print_warning "仓库中没有找到可用的软件包"
         # 如果是临时目录，则清理
         if [ "$temp_dir" != "$SCRIPTS_DIR" ]; then
             rm -rf "$(dirname "$temp_dir")"
@@ -725,7 +725,7 @@ install_new_plugins() {
     echo "0) 返回上一级菜单"
     echo ""
     
-    read -p "请选择要安装的插件 [0-$((i-1))]: " choice
+    read -p "请选择要安装的软件包 [0-$((i-1))]: " choice
     
     if [[ $choice -eq 0 ]]; then
         # 如果是临时目录，则清理
@@ -734,25 +734,25 @@ install_new_plugins() {
         fi
         return
     elif [[ $choice -ge 1 && $choice -lt $i ]]; then
-        local plugin_path="${plugin_map[$choice]}"
-        local plugin_name=$(basename "$plugin_path")
+        local package_path="${package_map[$choice]}"
+        local package_name=$(basename "$package_path")
         
-        # 安装插件
-        print_info "正在安装插件 '$plugin_name'..."
+        # 安装软件包
+        print_info "正在安装软件包 '$package_name'..."
         
         # 确保脚本目录存在
         mkdir -p "$SCRIPTS_DIR"
         
-        # 复制插件到脚本目录
-        cp "$plugin_path" "$SCRIPTS_DIR/"
-        chmod +x "$SCRIPTS_DIR/$plugin_name"
+        # 复制软件包到脚本目录
+        cp "$package_path" "$SCRIPTS_DIR/"
+        chmod +x "$SCRIPTS_DIR/$package_name"
         
-        print_success "插件 '$plugin_name' 已成功安装"
+        print_success "软件包 '$package_name' 已成功安装"
         
         # 询问是否创建别名
-        read -p "是否为此插件创建命令别名? (y/n): " create_alias
+        read -p "是否为此软件包创建命令别名? (y/n): " create_alias
         if [[ "$create_alias" =~ ^[Yy]$ ]]; then
-            local script_name=$(basename "$plugin_name" .sh)
+            local script_name=$(basename "$package_name" .sh)
             read -p "请输入别名 (默认: $script_name): " alias_name
             if [ -z "$alias_name" ]; then
                 alias_name="$script_name"
@@ -765,27 +765,27 @@ install_new_plugins() {
                 if [[ ! "$continue_anyway" =~ ^[Yy]$ ]]; then
                     print_warning "别名创建已取消"
                 else
-                    create_script_alias_internal "$SCRIPTS_DIR/$plugin_name" "$alias_name"
+                    create_script_alias_internal "$SCRIPTS_DIR/$package_name" "$alias_name"
                 fi
             else
-                create_script_alias_internal "$SCRIPTS_DIR/$plugin_name" "$alias_name"
+                create_script_alias_internal "$SCRIPTS_DIR/$package_name" "$alias_name"
             fi
         fi
         
         # 询问是否固定到主菜单
-        read -p "是否将此插件固定到主菜单? (y/n): " pin_to_menu
+        read -p "是否将此软件包固定到主菜单? (y/n): " pin_to_menu
         if [[ "$pin_to_menu" =~ ^[Yy]$ ]]; then
-            read -p "请输入显示在菜单中的名称 (默认: $plugin_name): " display_name
+            read -p "请输入显示在菜单中的名称 (默认: $package_name): " display_name
             if [ -z "$display_name" ]; then
-                display_name="$plugin_name"
+                display_name="$package_name"
             fi
             
-            # 初始化固定插件目录
+            # 初始化固定软件包目录
             init_pinned_directory
             
-            echo "$SCRIPTS_DIR/$plugin_name:$display_name" >> "$PINNED_FILE"
+            echo "$SCRIPTS_DIR/$package_name:$display_name" >> "$PINNED_FILE"
             
-            print_success "插件 '$plugin_name' 已固定到主菜单"
+            print_success "软件包 '$package_name' 已固定到主菜单"
         fi
     else
         print_error "无效选项"
@@ -812,7 +812,7 @@ create_script_alias_internal() {
     # 在bashrc中添加别名
     echo "alias $alias_name='$abs_script_path' # Traverse script alias:" >> "$BASHRC_FILE"
     
-    print_success "别名 '$alias_name' 已创建，可通过 '$alias_name' 命令执行插件"
+    print_success "别名 '$alias_name' 已创建，可通过 '$alias_name' 命令执行软件包"
     print_warning "请运行 'source ~/.bashrc' 或重启终端以使别名生效"
 }
 
@@ -888,11 +888,11 @@ view_aliases() {
 # 创建新别名
 create_alias() {
     print_title
-    echo -e "${YELLOW}为插件创建别名:${RESET}"
+    echo -e "${YELLOW}为软件包创建别名:${RESET}"
     
     local scripts=($(scan_installed_scripts))
     if [ ${#scripts[@]} -eq 0 ]; then
-        print_warning "没有找到可用的插件"
+        print_warning "没有找到可用的软件包"
         press_enter
         return
     fi
@@ -910,7 +910,7 @@ create_alias() {
     echo "0) 返回上一级菜单"
     echo ""
     
-    read -p "请选择要创建别名的插件 [0-$((i-1))]: " choice
+    read -p "请选择要创建别名的软件包 [0-$((i-1))]: " choice
     
     if [[ $choice -eq 0 ]]; then
         return
@@ -1004,26 +1004,26 @@ remove_alias() {
     press_enter
 }
 
-# 管理主页固定插件
-manage_pinned_plugins() {
-    # 初始化固定插件目录
+# 管理主页固定软件包
+manage_pinned_packages() {
+    # 初始化固定软件包目录
     init_pinned_directory
     
     while true; do
         print_title
-        echo -e "${YELLOW}主页固定插件管理:${RESET}"
-        echo "1) 查看已固定插件"
-        echo "2) 添加固定插件"
-        echo "3) 移除固定插件"
+        echo -e "${YELLOW}主页固定软件包管理:${RESET}"
+        echo "1) 查看已固定软件包"
+        echo "2) 添加固定软件包"
+        echo "3) 移除固定软件包"
         echo "0) 返回上一级菜单"
         echo ""
         
         read -p "请选择 [0-3]: " choice
         
         case $choice in
-            1) view_pinned_plugins ;;
-            2) add_pinned_plugin ;;
-            3) remove_pinned_plugin ;;
+            1) view_pinned_packages ;;
+            2) add_pinned_package ;;
+            3) remove_pinned_package ;;
             0) return ;;
             *) 
                 print_error "无效选项"
@@ -1033,13 +1033,13 @@ manage_pinned_plugins() {
     done
 }
 
-# 查看已固定插件
-view_pinned_plugins() {
+# 查看已固定软件包
+view_pinned_packages() {
     print_title
-    echo -e "${YELLOW}已固定的插件:${RESET}"
+    echo -e "${YELLOW}已固定的软件包:${RESET}"
     
     if [ ! -f "$PINNED_FILE" ] || [ ! -s "$PINNED_FILE" ]; then
-        print_warning "没有找到已固定的插件"
+        print_warning "没有找到已固定的软件包"
         press_enter
         return
     fi
@@ -1054,21 +1054,21 @@ view_pinned_plugins() {
     done < "$PINNED_FILE"
     
     if [ $i -eq 1 ]; then
-        print_warning "没有找到有效的固定插件"
+        print_warning "没有找到有效的固定软件包"
     fi
     
     echo ""
     press_enter
 }
 
-# 添加固定插件
-add_pinned_plugin() {
+# 添加固定软件包
+add_pinned_package() {
     print_title
-    echo -e "${YELLOW}添加固定插件到主页:${RESET}"
+    echo -e "${YELLOW}添加固定软件包到主页:${RESET}"
     
     local scripts=($(scan_installed_scripts))
     if [ ${#scripts[@]} -eq 0 ]; then
-        print_warning "没有找到可用的插件"
+        print_warning "没有找到可用的软件包"
         press_enter
         return
     fi
@@ -1086,7 +1086,7 @@ add_pinned_plugin() {
     echo "0) 返回上一级菜单"
     echo ""
     
-    read -p "请选择要固定的插件 [0-$((i-1))]: " choice
+    read -p "请选择要固定的软件包 [0-$((i-1))]: " choice
     
     if [[ $choice -eq 0 ]]; then
         return
@@ -1097,7 +1097,7 @@ add_pinned_plugin() {
         # 检查是否已经固定
         if [ -f "$PINNED_FILE" ]; then
             if grep -q "^$script_path:" "$PINNED_FILE"; then
-                print_warning "该插件已经固定在主页"
+                print_warning "该软件包已经固定在主页"
                 press_enter
                 return
             fi
@@ -1110,7 +1110,7 @@ add_pinned_plugin() {
         
         echo "$script_path:$display_name" >> "$PINNED_FILE"
         
-        print_success "插件 '$script_name' 已成功固定到主页"
+        print_success "软件包 '$script_name' 已成功固定到主页"
     else
         print_error "无效选项"
     fi
@@ -1118,13 +1118,13 @@ add_pinned_plugin() {
     press_enter
 }
 
-# 移除固定插件
-remove_pinned_plugin() {
+# 移除固定软件包
+remove_pinned_package() {
     print_title
-    echo -e "${YELLOW}从主页移除固定插件:${RESET}"
+    echo -e "${YELLOW}从主页移除固定软件包:${RESET}"
     
     if [ ! -f "$PINNED_FILE" ] || [ ! -s "$PINNED_FILE" ]; then
-        print_warning "没有找到已固定的插件"
+        print_warning "没有找到已固定的软件包"
         press_enter
         return
     fi
@@ -1141,7 +1141,7 @@ remove_pinned_plugin() {
     done < "$PINNED_FILE"
     
     if [ $i -eq 1 ]; then
-        print_warning "没有找到有效的固定插件"
+        print_warning "没有找到有效的固定软件包"
         press_enter
         return
     fi
@@ -1149,7 +1149,7 @@ remove_pinned_plugin() {
     echo "0) 返回上一级菜单"
     echo ""
     
-    read -p "请选择要移除的固定插件 [0-$((i-1))]: " choice
+    read -p "请选择要移除的固定软件包 [0-$((i-1))]: " choice
     
     if [[ $choice -eq 0 ]]; then
         return
@@ -1163,7 +1163,7 @@ remove_pinned_plugin() {
         # 提取显示名称以用于成功消息
         IFS=':' read -r script_path display_name <<< "$entry"
         
-        print_success "插件 '$display_name' 已成功从主页移除"
+        print_success "软件包 '$display_name' 已成功从主页移除"
     else
         print_error "无效选项"
     fi
@@ -1173,7 +1173,7 @@ remove_pinned_plugin() {
 
 # 主菜单
 main_menu() {
-    # 初始化固定插件目录
+    # 初始化固定软件包目录
     init_pinned_directory
     
     while true; do
@@ -1182,12 +1182,12 @@ main_menu() {
         echo "1) 切换软件源"
         echo "2) 更新Termux环境"
         echo "3) 安装基本环境"
-        echo "4) 插件管理"
+        echo "4) 软件包管理"
         echo "5) 设置"
         echo "0) 退出"
         echo ""
         
-        # 显示已固定的插件
+        # 显示已固定的软件包
         local pinned_count=0
         
         if [ -f "$PINNED_FILE" ] && [ -s "$PINNED_FILE" ]; then
@@ -1216,11 +1216,11 @@ main_menu() {
             1) switch_mirror ;;
             2) update_termux ;;
             3) install_basic_environment ;;
-            4) plugin_management ;;
+            4) package_management ;;
             5) settings_menu ;;
             0) exit 0 ;;
             *)
-                # 检查是否选择了固定插件
+                # 检查是否选择了固定软件包
                 if [ -f "$PINNED_FILE" ] && [ -s "$PINNED_FILE" ] && [ -n "$pinned_count" ]; then
                     local pinned_index=$((choice-5))
                     if [ $pinned_index -ge 1 ] && [ $pinned_index -le $pinned_count ]; then
