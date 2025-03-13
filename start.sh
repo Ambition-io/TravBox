@@ -16,6 +16,7 @@ SCRIPT_DIR="$HOME/travbox"
 SCRIPTS_DIR="$SCRIPT_DIR/scripts"
 CONFIG_FILE="$SCRIPT_DIR/config.sh"
 REPO_URL="https://github.com/Ambition-io/TravBox.git"
+BASHRC_FILE="$HOME/.bashrc"
 
 # 确保目录存在
 mkdir -p "$SCRIPTS_DIR"
@@ -27,7 +28,6 @@ if [ ! -f "$CONFIG_FILE" ]; then
 # 配置文件
 REPO_URL="$REPO_URL"
 DEFAULT_MIRROR="https://mirrors.tuna.tsinghua.edu.cn/termux"
-SHORTCUT_NAME="travbox"
 EOF
     chmod +x "$CONFIG_FILE"
 fi
@@ -45,10 +45,10 @@ print_title() {
 }
 
 # 打印信息、成功、警告和错误消息
-print_info() { echo -e "${BLUE}[信息]${RESET} $1"; }
-print_success() { echo -e "${GREEN}[成功]${RESET} $1"; }
-print_warning() { echo -e "${YELLOW}[警告]${RESET} $1"; }
-print_error() { echo -e "${RED}[错误]${RESET} $1"; }
+print_info() { echo -e "${BLUE}[信息]${RESET} \$1"; }
+print_success() { echo -e "${GREEN}[成功]${RESET} \$1"; }
+print_warning() { echo -e "${YELLOW}[警告]${RESET} \$1"; }
+print_error() { echo -e "${RED}[错误]${RESET} \$1"; }
 
 # 按键继续
 press_enter() {
@@ -61,9 +61,20 @@ init_framework() {
     # 确保必要的目录存在
     mkdir -p "$SCRIPTS_DIR"
     
-    # 检查快捷链接是否存在，不存在则创建
-    if [ ! -f "$PREFIX/bin/$SHORTCUT_NAME" ]; then
-        update_framework_shortcut
+    # 确保存在 alias 指令可以访问 travbox
+    ensure_framework_alias
+}
+
+# 确保框架别名存在
+ensure_framework_alias() {
+    local current_script="$(realpath "\$0")"
+    local alias_name="travbox"
+    
+    # 检查别名是否已经存在
+    if ! grep -q "alias $alias_name=" "$BASHRC_FILE" 2>/dev/null; then
+        echo "alias $alias_name='$current_script'" >> "$BASHRC_FILE"
+        print_info "框架别名已添加: $alias_name"
+        print_warning "请运行 'source ~/.bashrc' 或重启终端以应用更改"
     fi
 }
 
@@ -103,23 +114,6 @@ configure_git() {
             print_info "已将仓库URL从SSH格式转换为HTTPS格式"
         fi
     fi
-}
-
-# 更新框架快捷链接
-update_framework_shortcut() {
-    local current_script="$(realpath "$0")"
-    
-    if [ -n "$1" ] && [ "$1" != "$SHORTCUT_NAME" ] && [ -f "$PREFIX/bin/$1" ]; then
-        rm -f "$PREFIX/bin/$1"
-    fi
-    
-    cat > "$PREFIX/bin/$SHORTCUT_NAME" << EOF
-#!/data/data/com.termux/files/usr/bin/bash
-exec "$current_script" "\$@"
-EOF
-    chmod +x "$PREFIX/bin/$SHORTCUT_NAME"
-    
-    print_info "框架快捷链接已创建/更新: $SHORTCUT_NAME"
 }
 
 # 扫描已安装脚本
@@ -304,8 +298,8 @@ uninstall_extension() {
     print_title
     echo -e "${YELLOW}可卸载的插件:${RESET}"
     
-    # 确保目录变量已初始化
-    init_directories
+    # 初始化目录变量
+    init_pinned_directory
     
     local scripts=($(scan_installed_scripts))
     if [ ${#scripts[@]} -eq 0 ]; then
@@ -344,17 +338,9 @@ uninstall_extension() {
                 mv "$PINNED_FILE.tmp" "$PINNED_FILE"
             fi
             
-            # 移除快捷链接
-            if [ -f "$SHORTCUTS_FILE" ]; then
-                while IFS=: read -r shortcut_name script_link; do
-                    if [[ "$script_link" == "$script_path" ]]; then
-                        rm -f "$PREFIX/bin/$shortcut_name"
-                    fi
-                done < "$SHORTCUTS_FILE"
-                
-                grep -v ":$script_path$" "$SHORTCUTS_FILE" > "$SHORTCUTS_FILE.tmp"
-                mv "$SHORTCUTS_FILE.tmp" "$SHORTCUTS_FILE"
-            fi
+            # 移除别名
+            local script_basename=$(basename "$script_path" .sh)
+            remove_script_alias "$script_basename"
             
             # 删除脚本文件
             rm -f "$script_path"
@@ -388,25 +374,22 @@ uninstall_framework() {
     # 创建临时脚本来完成卸载
     local temp_script="/data/data/com.termux/files/usr/tmp/uninstall_framework_$.sh"
     
-    # 使用变量，不使用硬编码路径
     cat > "$temp_script" << EOF
 #!/data/data/com.termux/files/usr/bin/bash
 
 # 使用父脚本传递的配置变量
 SCRIPT_DIR="$SCRIPT_DIR"
 CONFIG_FILE="$CONFIG_FILE"
-SHORTCUT_NAME="$SHORTCUT_NAME"
+BASHRC_FILE="$HOME/.bashrc"
 
-# 获取配置文件中的快捷名称（如果未设置）
-if [ -z "\$SHORTCUT_NAME" ] && [ -f "\$CONFIG_FILE" ]; then
-    SHORTCUT_NAME=\$(grep -m 1 "^SHORTCUT_NAME=" "\$CONFIG_FILE" | cut -d'"' -f2)
+# 清理别名
+if [ -f "\$BASHRC_FILE" ]; then
+    # 移除travbox别名
+    sed -i '/alias travbox=/d' "\$BASHRC_FILE"
+    
+    # 移除所有插件别名行（以"# Traverse script alias:"标记的行）
+    sed -i '/# Traverse script alias:/d' "\$BASHRC_FILE"
 fi
-if [ -z "\$SHORTCUT_NAME" ]; then
-    SHORTCUT_NAME="travbox"
-fi
-
-# 清理符号链接
-rm -f "\$PREFIX/bin/\$SHORTCUT_NAME"
 
 # 删除框架目录
 rm -rf "\$SCRIPT_DIR"
@@ -428,7 +411,7 @@ EOF
 
 # 执行选定的脚本
 execute_script() {
-    local script="$1"
+    local script="\$1"
     
     if [ -f "$script" ] && [ -x "$script" ]; then
         print_info "执行插件: $(basename "$script")"
@@ -476,17 +459,16 @@ show_version_info() {
     local script_count=$(find "$SCRIPTS_DIR" -type f -name "*.sh" | wc -l)
     echo "已安装插件: $script_count"
     
-    # 定义为局部变量并使用现有变量构建路径
-    local pinned_dir="$SCRIPT_DIR/pinned"
-    local pinned_file="$pinned_dir/scripts.list"
-    if [ -f "$pinned_file" ]; then
-        local pinned_count=$(wc -l < "$pinned_file")
+    # 初始化固定插件目录
+    init_pinned_directory
+    
+    if [ -f "$PINNED_FILE" ]; then
+        local pinned_count=$(wc -l < "$PINNED_FILE")
         echo "已固定插件: $pinned_count"
     else
         echo "已固定插件: 0"
     fi
     
-    # 改用变量路径
     local init_file="$SCRIPT_DIR/.initialized"
     if [ -f "$init_file" ]; then
         local install_date=$(stat -c %y "$init_file" 2>/dev/null || stat -f "%Sm" "$init_file" 2>/dev/null)
@@ -503,11 +485,10 @@ config_management() {
     echo -e "${YELLOW}配置管理:${RESET}"
     echo "1) 修改仓库URL"
     echo "2) 恢复默认配置"
-    echo "3) 自定义框架快捷名称"
     echo "0) 返回上一级菜单"
     echo ""
     
-    read -p "请选择 [0-3]: " choice
+    read -p "请选择 [0-2]: " choice
     
     case $choice in
         1)
@@ -529,40 +510,11 @@ config_management() {
 # 配置文件
 REPO_URL="$REPO_URL"
 DEFAULT_MIRROR="https://mirrors.tuna.tsinghua.edu.cn/termux"
-SHORTCUT_NAME="travbox"
 EOF
                 chmod +x "$CONFIG_FILE"
                 
                 print_success "配置已重置为默认值"
             fi
-            ;;
-        3)
-            echo "当前快捷名称: $SHORTCUT_NAME"
-            read -p "请输入新的快捷名称 (留空使用默认值'travbox'): " new_name
-            
-            if [ -z "$new_name" ]; then
-                new_name="travbox"
-            fi
-            
-            if command -v "$new_name" &> /dev/null && [ "$new_name" != "$SHORTCUT_NAME" ]; then
-                print_warning "命令 '$new_name' 已存在，可能会导致冲突。"
-                read -p "是否继续? (y/n): " continue_anyway
-                if [[ ! "$continue_anyway" =~ ^[Yy]$ ]]; then
-                    print_warning "快捷名称修改已取消"
-                    press_enter
-                    return
-                fi
-            fi
-            
-            local old_shortcut="$SHORTCUT_NAME"
-            
-            sed -i "s|SHORTCUT_NAME=.*|SHORTCUT_NAME=\"$new_name\"|" "$CONFIG_FILE"
-            
-            source "$CONFIG_FILE"
-            
-            update_framework_shortcut "$old_shortcut"
-            
-            print_success "快捷名称已更新为: $new_name"
             ;;
         0)
             return
@@ -578,32 +530,26 @@ EOF
 
 # ==================== 新的插件管理功能 ====================
 
-# 定义常用目录变量以提高可维护性
-init_directories() {
-    # 主要目录
+# 初始化固定插件目录
+init_pinned_directory() {
     PINNED_DIR="$SCRIPT_DIR/pinned"
-    SHORTCUTS_DIR="$SCRIPT_DIR/shortcuts"
-    
-    # 文件路径
     PINNED_FILE="$PINNED_DIR/scripts.list"
-    SHORTCUTS_FILE="$SHORTCUTS_DIR/shortcuts.list"
-    INITIALIZED_FILE="$SCRIPT_DIR/.initialized"
     
     # 创建必要的目录
-    mkdir -p "$PINNED_DIR" "$SHORTCUTS_DIR"
+    mkdir -p "$PINNED_DIR"
 }
 
 # 插件管理菜单
 plugin_management() {
-    # 初始化目录变量
-    init_directories
+    # 初始化固定插件目录
+    init_pinned_directory
     
     while true; do
         print_title
         echo -e "${YELLOW}插件管理:${RESET}"
         echo "1) 已安装插件列表"
         echo "2) 安装新插件"
-        echo "3) 管理快捷命令"
+        echo "3) 管理别名"
         echo "4) 管理主页固定插件" 
         echo "0) 返回主菜单"
         echo ""
@@ -613,7 +559,7 @@ plugin_management() {
         case $choice in
             1) show_installed_plugins ;;
             2) install_new_plugins ;;
-            3) manage_shortcuts ;;
+            3) manage_aliases ;;
             4) manage_pinned_plugins ;;
             0) return ;;
             *) 
@@ -755,25 +701,26 @@ install_new_plugins() {
         
         print_success "插件 '$plugin_name' 已成功安装"
         
-        # 询问是否创建快捷命令
-        read -p "是否为此插件创建快捷命令? (y/n): " create_shortcut
-        if [[ "$create_shortcut" =~ ^[Yy]$ ]]; then
+        # 询问是否创建别名
+        read -p "是否为此插件创建命令别名? (y/n): " create_alias
+        if [[ "$create_alias" =~ ^[Yy]$ ]]; then
             local script_name=$(basename "$plugin_name" .sh)
-            read -p "请输入快捷命令名称 (默认: $script_name): " shortcut_name
-            if [ -z "$shortcut_name" ]; then
-                shortcut_name="$script_name"
+            read -p "请输入别名 (默认: $script_name): " alias_name
+            if [ -z "$alias_name" ]; then
+                alias_name="$script_name"
             fi
             
-            if command -v "$shortcut_name" &> /dev/null; then
-                print_warning "命令 '$shortcut_name' 已存在，可能会导致冲突。"
-                read -p "是否继续? (y/n): " continue_anyway
+            # 检查别名是否已存在于bashrc中
+            if grep -q "alias $alias_name=" "$BASHRC_FILE" 2>/dev/null; then
+                print_warning "别名 '$alias_name' 已存在，可能会导致冲突。"
+                read -p "是否覆盖? (y/n): " continue_anyway
                 if [[ ! "$continue_anyway" =~ ^[Yy]$ ]]; then
-                    print_warning "快捷命令创建已取消"
+                    print_warning "别名创建已取消"
                 else
-                    create_script_shortcut_internal "$SCRIPTS_DIR/$plugin_name" "$shortcut_name"
+                    create_script_alias_internal "$SCRIPTS_DIR/$plugin_name" "$alias_name"
                 fi
             else
-                create_script_shortcut_internal "$SCRIPTS_DIR/$plugin_name" "$shortcut_name"
+                create_script_alias_internal "$SCRIPTS_DIR/$plugin_name" "$alias_name"
             fi
         fi
         
@@ -785,8 +732,10 @@ install_new_plugins() {
                 display_name="$plugin_name"
             fi
             
-            mkdir -p "$SCRIPT_DIR/pinned"
-            echo "$SCRIPTS_DIR/$plugin_name:$display_name" >> "$SCRIPT_DIR/pinned/scripts.list"
+            # 初始化固定插件目录
+            init_pinned_directory
+            
+            echo "$SCRIPTS_DIR/$plugin_name:$display_name" >> "$PINNED_FILE"
             
             print_success "插件 '$plugin_name' 已固定到主菜单"
         fi
@@ -802,57 +751,48 @@ install_new_plugins() {
     press_enter
 }
 
-# 创建脚本快捷方式的内部函数
-create_script_shortcut_internal() {
-    local script_path="$1"
-    local shortcut_name="$2"
+# 创建脚本别名的内部函数
+create_script_alias_internal() {
+    local script_path="\$1"
+    local alias_name="\$2"
     
     local abs_script_path=$(readlink -f "$script_path" 2>/dev/null || realpath "$script_path" 2>/dev/null || echo "$script_path")
     
-    # 如果已存在，先移除
-    rm -f "$PREFIX/bin/$shortcut_name"
+    # 如果已存在同名别名，先移除
+    sed -i "/alias $alias_name=/d" "$BASHRC_FILE" 2>/dev/null
     
-    # 在bin中创建快捷方式
-    cat > "$PREFIX/bin/$shortcut_name" << EOF
-#!/data/data/com.termux/files/usr/bin/bash
-# 插件快捷方式
-# 目标: $abs_script_path
-
-cd "$(dirname "$abs_script_path")" && exec "./$(basename "$abs_script_path")" "\$@"
-EOF
-    chmod +x "$PREFIX/bin/$shortcut_name"
+    # 在bashrc中添加别名
+    echo "alias $alias_name='$abs_script_path' # Traverse script alias:" >> "$BASHRC_FILE"
     
-    # 使用定义的变量路径
-    mkdir -p "$SHORTCUTS_DIR"
-    
-    # 如果快捷方式已存在，先移除旧条目
-    if [ -f "$SHORTCUTS_FILE" ]; then
-        grep -v "^$shortcut_name:" "$SHORTCUTS_FILE" > "$SHORTCUTS_FILE.tmp"
-        mv "$SHORTCUTS_FILE.tmp" "$SHORTCUTS_FILE"
-    fi
-    
-    echo "$shortcut_name:$abs_script_path" >> "$SHORTCUTS_FILE"
-    
-    print_success "快捷命令 '$shortcut_name' 已创建"
+    print_success "别名 '$alias_name' 已创建，可通过 '$alias_name' 命令执行插件"
+    print_warning "请运行 'source ~/.bashrc' 或重启终端以使别名生效"
 }
 
-# 管理快捷命令
-manage_shortcuts() {
+# 移除脚本别名
+remove_script_alias() {
+    local alias_name="\$1"
+    
+    # 从bashrc中移除别名
+    sed -i "/alias $alias_name=/d" "$BASHRC_FILE" 2>/dev/null
+}
+
+# 管理别名
+manage_aliases() {
     while true; do
         print_title
-        echo -e "${YELLOW}快捷命令管理:${RESET}"
-        echo "1) 查看现有快捷命令"
-        echo "2) 创建新快捷命令"
-        echo "3) 删除快捷命令"
+        echo -e "${YELLOW}别名管理:${RESET}"
+        echo "1) 查看现有别名"
+        echo "2) 创建新别名"
+        echo "3) 删除别名"
         echo "0) 返回上一级菜单"
         echo ""
         
         read -p "请选择 [0-3]: " choice
         
         case $choice in
-            1) view_shortcuts ;;
-            2) create_shortcut ;;
-            3) remove_shortcut ;;
+            1) view_aliases ;;
+            2) create_alias ;;
+            3) remove_alias ;;
             0) return ;;
             *) 
                 print_error "无效选项"
@@ -862,41 +802,45 @@ manage_shortcuts() {
     done
 }
 
-# 查看现有快捷命令
-view_shortcuts() {
+# 查看现有别名
+view_aliases() {
     print_title
-    echo -e "${YELLOW}现有快捷命令:${RESET}"
+    echo -e "${YELLOW}现有别名:${RESET}"
     
-    # 确保目录变量已初始化
-    init_directories
-    
-    if [ ! -f "$SHORTCUTS_FILE" ] || [ ! -s "$SHORTCUTS_FILE" ]; then
-        print_warning "没有找到快捷命令"
+    if [ ! -f "$BASHRC_FILE" ]; then
+        print_warning "找不到 .bashrc 文件"
         press_enter
         return
     fi
     
+    local found=false
     local i=1
     
-    while IFS=: read -r shortcut_name script_path; do
-        if [ -f "$PREFIX/bin/$shortcut_name" ]; then
-            echo "$i) $shortcut_name -> $(basename "$script_path")"
+    while IFS= read -r line; do
+        # 找到由本框架创建的别名
+        if [[ "$line" == *"# Traverse script alias:"* ]]; then
+            local alias_def=$(echo "$line" | cut -d'=' -f1)
+            local alias_name="${alias_def#alias }"
+            local script_path=$(echo "$line" | cut -d"'" -f2)
+            
+            echo "$i) $alias_name -> $(basename "$script_path")"
             ((i++))
+            found=true
         fi
-    done < "$SHORTCUTS_FILE"
+    done < "$BASHRC_FILE"
     
-    if [ $i -eq 1 ]; then
-        print_warning "没有找到有效的快捷命令"
+    if ! $found; then
+        print_warning "没有找到由框架创建的别名"
     fi
     
     echo ""
     press_enter
 }
 
-# 创建新快捷命令
-create_shortcut() {
+# 创建新别名
+create_alias() {
     print_title
-    echo -e "${YELLOW}为插件创建快捷命令:${RESET}"
+    echo -e "${YELLOW}为插件创建别名:${RESET}"
     
     local scripts=($(scan_installed_scripts))
     if [ ${#scripts[@]} -eq 0 ]; then
@@ -918,7 +862,7 @@ create_shortcut() {
     echo "0) 返回上一级菜单"
     echo ""
     
-    read -p "请选择要创建快捷方式的插件 [0-$((i-1))]: " choice
+    read -p "请选择要创建别名的插件 [0-$((i-1))]: " choice
     
     if [[ $choice -eq 0 ]]; then
         return
@@ -926,22 +870,23 @@ create_shortcut() {
         local script_path="${script_map[$choice]}"
         local script_name=$(basename "$script_path" .sh)
         
-        read -p "请输入快捷命令名称 (默认: $script_name): " shortcut_name
-        if [ -z "$shortcut_name" ]; then
-            shortcut_name="$script_name"
+        read -p "请输入别名 (默认: $script_name): " alias_name
+        if [ -z "$alias_name" ]; then
+            alias_name="$script_name"
         fi
         
-        if command -v "$shortcut_name" &> /dev/null; then
-            print_warning "命令 '$shortcut_name' 已存在，可能会导致冲突。"
-            read -p "是否继续? (y/n): " continue_anyway
+        # 检查别名是否已存在于bashrc中
+        if grep -q "alias $alias_name=" "$BASHRC_FILE" 2>/dev/null; then
+            print_warning "别名 '$alias_name' 已存在，可能会导致冲突。"
+            read -p "是否覆盖? (y/n): " continue_anyway
             if [[ ! "$continue_anyway" =~ ^[Yy]$ ]]; then
-                print_warning "快捷命令创建已取消"
+                print_warning "别名创建已取消"
                 press_enter
                 return
             fi
         fi
         
-        create_script_shortcut_internal "$script_path" "$shortcut_name"
+        create_script_alias_internal "$script_path" "$alias_name"
     else
         print_error "无效选项"
     fi
@@ -949,33 +894,37 @@ create_shortcut() {
     press_enter
 }
 
-# 删除快捷命令
-remove_shortcut() {
+# 删除别名
+remove_alias() {
     print_title
-    echo -e "${YELLOW}删除快捷命令:${RESET}"
+    echo -e "${YELLOW}删除别名:${RESET}"
     
-    # 确保目录变量已初始化
-    init_directories
-    
-    if [ ! -f "$SHORTCUTS_FILE" ] || [ ! -s "$SHORTCUTS_FILE" ]; then
-        print_warning "没有找到快捷命令"
+    if [ ! -f "$BASHRC_FILE" ]; then
+        print_warning "找不到 .bashrc 文件"
         press_enter
         return
     fi
     
+    # 收集所有由框架创建的别名
+    local aliases=()
     local i=1
-    declare -A shortcut_map
+    declare -A alias_map
     
-    while IFS=: read -r shortcut_name script_path; do
-        if [ -f "$PREFIX/bin/$shortcut_name" ]; then
-            echo "$i) $shortcut_name -> $(basename "$script_path")"
-            shortcut_map[$i]="$shortcut_name:$script_path"
+    while IFS= read -r line; do
+        # 找到由本框架创建的别名
+        if [[ "$line" == *"# Traverse script alias:"* ]]; then
+            local alias_def=$(echo "$line" | cut -d'=' -f1)
+            local alias_name="${alias_def#alias }"
+            local script_path=$(echo "$line" | cut -d"'" -f2)
+            
+            echo "$i) $alias_name -> $(basename "$script_path")"
+            alias_map[$i]="$alias_name"
             ((i++))
         fi
-    done < "$SHORTCUTS_FILE"
+    done < "$BASHRC_FILE"
     
     if [ $i -eq 1 ]; then
-        print_warning "没有找到有效的快捷命令"
+        print_warning "没有找到由框架创建的别名"
         press_enter
         return
     fi
@@ -983,24 +932,20 @@ remove_shortcut() {
     echo "0) 返回上一级菜单"
     echo ""
     
-    read -p "请选择要删除的快捷命令 [0-$((i-1))]: " choice
+    read -p "请选择要删除的别名 [0-$((i-1))]: " choice
     
     if [[ $choice -eq 0 ]]; then
         return
     elif [[ $choice -ge 1 && $choice -lt $i ]]; then
-        local entry="${shortcut_map[$choice]}"
-        IFS=':' read -r shortcut_name script_path <<< "$entry"
+        local alias_name="${alias_map[$choice]}"
         
-        read -p "确定要删除快捷命令 '$shortcut_name'? (y/n): " confirm
+        read -p "确定要删除别名 '$alias_name'? (y/n): " confirm
         if [[ "$confirm" =~ ^[Yy]$ ]]; then
-            # 删除快捷命令文件
-            rm -f "$PREFIX/bin/$shortcut_name"
+            # 删除别名
+            sed -i "/alias $alias_name=.*# Traverse script alias:/d" "$BASHRC_FILE"
             
-            # 从列表中移除
-            grep -v "^$shortcut_name:" "$SHORTCUTS_FILE" > "$SHORTCUTS_FILE.tmp"
-            mv "$SHORTCUTS_FILE.tmp" "$SHORTCUTS_FILE"
-            
-            print_success "快捷命令 '$shortcut_name' 已成功删除"
+            print_success "别名 '$alias_name' 已成功删除"
+            print_warning "请运行 'source ~/.bashrc' 或重启终端以应用更改"
         else
             print_warning "删除已取消"
         fi
@@ -1013,6 +958,9 @@ remove_shortcut() {
 
 # 管理主页固定插件
 manage_pinned_plugins() {
+    # 初始化固定插件目录
+    init_pinned_directory
+    
     while true; do
         print_title
         echo -e "${YELLOW}主页固定插件管理:${RESET}"
@@ -1042,9 +990,6 @@ view_pinned_plugins() {
     print_title
     echo -e "${YELLOW}已固定的插件:${RESET}"
     
-    # 确保目录变量已初始化
-    init_directories
-    
     if [ ! -f "$PINNED_FILE" ] || [ ! -s "$PINNED_FILE" ]; then
         print_warning "没有找到已固定的插件"
         press_enter
@@ -1072,9 +1017,6 @@ view_pinned_plugins() {
 add_pinned_plugin() {
     print_title
     echo -e "${YELLOW}添加固定插件到主页:${RESET}"
-    
-    # 确保目录变量已初始化
-    init_directories
     
     local scripts=($(scan_installed_scripts))
     if [ ${#scripts[@]} -eq 0 ]; then
@@ -1118,7 +1060,6 @@ add_pinned_plugin() {
             display_name="$script_name"
         fi
         
-        mkdir -p "$PINNED_DIR"
         echo "$script_path:$display_name" >> "$PINNED_FILE"
         
         print_success "插件 '$script_name' 已成功固定到主页"
@@ -1133,9 +1074,6 @@ add_pinned_plugin() {
 remove_pinned_plugin() {
     print_title
     echo -e "${YELLOW}从主页移除固定插件:${RESET}"
-    
-    # 确保目录变量已初始化
-    init_directories
     
     if [ ! -f "$PINNED_FILE" ] || [ ! -s "$PINNED_FILE" ]; then
         print_warning "没有找到已固定的插件"
@@ -1187,8 +1125,8 @@ remove_pinned_plugin() {
 
 # 主菜单
 main_menu() {
-    # 初始化目录变量
-    init_directories
+    # 初始化固定插件目录
+    init_pinned_directory
     
     while true; do
         print_title
@@ -1242,8 +1180,8 @@ main_menu() {
                         while IFS=: read -r script_path display_name; do
                             if [ -f "$script_path" ] && [ -x "$script_path" ]; then
                                 ((j++))
-                                if [ $j -eq $pinned_index ]; then
-                                    execute_script "$script_path"
+                                 if [ $j -eq $pinned_index ]; then
+                                       execute_script "$script_path"
                                     break
                                 fi
                             fi
