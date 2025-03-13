@@ -28,6 +28,7 @@ if [ ! -f "$CONFIG_FILE" ]; then
 # 配置文件
 REPO_URL="$REPO_URL"
 DEFAULT_MIRROR="https://mirrors.tuna.tsinghua.edu.cn/termux"
+FRAMEWORK_ALIAS="travbox"
 EOF
     chmod +x "$CONFIG_FILE"
 fi
@@ -68,10 +69,18 @@ init_framework() {
 # 确保框架别名存在
 ensure_framework_alias() {
     local current_script="$(realpath "$0")"
-    local alias_name="travbox"
+    local alias_name="${FRAMEWORK_ALIAS:-travbox}"
     
-    # 检查别名是否已经存在
-    if ! grep -q "alias $alias_name=" "$BASHRC_FILE" 2>/dev/null; then
+    # 检查别名是否已经存在或需要更新
+    if grep -q "alias $alias_name=" "$BASHRC_FILE" 2>/dev/null; then
+        # 检查是否指向当前脚本，如果不是则更新
+        if ! grep -q "alias $alias_name='$current_script'" "$BASHRC_FILE" 2>/dev/null; then
+            sed -i "s|alias $alias_name=.*|alias $alias_name='$current_script'|" "$BASHRC_FILE"
+            print_info "框架别名已更新: $alias_name"
+            print_warning "请运行 'source ~/.bashrc' 或重启终端以应用更改"
+        fi
+    else
+        # 别名不存在，创建新别名
         echo "alias $alias_name='$current_script'" >> "$BASHRC_FILE"
         print_info "框架别名已添加: $alias_name"
         print_warning "请运行 'source ~/.bashrc' 或重启终端以应用更改"
@@ -371,41 +380,26 @@ uninstall_framework() {
         return
     fi
     
-    # 创建临时脚本来完成卸载
-    local temp_script="/data/data/com.termux/files/usr/tmp/uninstall_framework_$.sh"
+    # 确定框架别名
+    local framework_alias="${FRAMEWORK_ALIAS:-travbox}"
+    local bashrc="$HOME/.bashrc"
     
-    cat > "$temp_script" << EOF
-#!/data/data/com.termux/files/usr/bin/bash
-
-# 使用父脚本传递的配置变量
-SCRIPT_DIR="$SCRIPT_DIR"
-CONFIG_FILE="$CONFIG_FILE"
-BASHRC_FILE="$HOME/.bashrc"
-
-# 清理别名
-if [ -f "$BASHRC_FILE" ]; then
-    # 移除travbox别名
-    sed -i '/alias travbox=/d' "$BASHRC_FILE"
+    # 清理别名
+    if [ -f "$bashrc" ]; then
+        # 移除框架别名
+        sed -i "/alias $framework_alias=/d" "$bashrc"
+        
+        # 移除所有插件别名行（以"# Traverse script alias:"标记的行）
+        sed -i '/# Traverse script alias:/d' "$bashrc"
+    fi
     
-    # 移除所有插件别名行（以"# Traverse script alias:"标记的行）
-    sed -i '/# Traverse script alias:/d' "$BASHRC_FILE"
-fi
-
-# 删除框架目录
-rm -rf "$SCRIPT_DIR"
-
-echo -e "\033[32m[成功]\033[0m Traverse Termux框架已成功卸载"
-echo ""
-echo "感谢您使用本框架！"
-
-# 删除临时脚本
-rm -f "$0"
-EOF
+    # 删除框架目录
+    rm -rf "$SCRIPT_DIR"
     
-    chmod +x "$temp_script"
+    print_success "Traverse Termux框架已成功卸载"
+    echo ""
+    echo "感谢您使用本框架！"
     
-    print_info "开始卸载..."
-    exec "$temp_script"
     exit 0
 }
 
@@ -484,11 +478,12 @@ config_management() {
     print_title
     echo -e "${YELLOW}配置管理:${RESET}"
     echo "1) 修改仓库URL"
-    echo "2) 恢复默认配置"
+    echo "2) 修改框架别名"
+    echo "3) 恢复默认配置"
     echo "0) 返回上一级菜单"
     echo ""
     
-    read -p "请选择 [0-2]: " choice
+    read -p "请选择 [0-3]: " choice
     
     case $choice in
         1)
@@ -503,15 +498,68 @@ config_management() {
             fi
             ;;
         2)
+            current_alias="${FRAMEWORK_ALIAS:-travbox}"
+            read -p "请输入新的框架别名 (当前: $current_alias, 留空使用默认'travbox'): " new_alias
+            
+            # 如果新别名为空，则使用默认值
+            if [ -z "$new_alias" ]; then
+                new_alias="travbox"
+            fi
+            
+            # 如果新别名与当前别名不同
+            if [ "$new_alias" != "$current_alias" ]; then
+                # 移除旧的别名
+                if grep -q "alias $current_alias=" "$BASHRC_FILE" 2>/dev/null; then
+                    sed -i "/alias $current_alias=/d" "$BASHRC_FILE" 2>/dev/null
+                fi
+                
+                # 更新配置文件中的别名
+                if grep -q "FRAMEWORK_ALIAS=" "$CONFIG_FILE" 2>/dev/null; then
+                    sed -i "s|FRAMEWORK_ALIAS=.*|FRAMEWORK_ALIAS=\"$new_alias\"|" "$CONFIG_FILE"
+                else
+                    echo "FRAMEWORK_ALIAS=\"$new_alias\"" >> "$CONFIG_FILE"
+                fi
+                
+                # 更新FRAMEWORK_ALIAS变量
+                FRAMEWORK_ALIAS="$new_alias"
+                
+                # 更新别名
+                ensure_framework_alias
+                
+                print_success "框架别名已更新为: $new_alias"
+                print_warning "请运行 'source ~/.bashrc' 或重启终端以使别名生效"
+            else
+                print_info "别名未更改"
+            fi
+            ;;
+        3)
             read -p "确定要恢复默认配置? (y/n): " confirm
             if [[ "$confirm" =~ ^[Yy]$ ]]; then
+                # 存储当前别名以便移除
+                current_alias="${FRAMEWORK_ALIAS:-travbox}"
+                
                 cat > "$CONFIG_FILE" << EOF
 #!/data/data/com.termux/files/usr/bin/bash
 # 配置文件
 REPO_URL="$REPO_URL"
 DEFAULT_MIRROR="https://mirrors.tuna.tsinghua.edu.cn/termux"
+FRAMEWORK_ALIAS="travbox"
 EOF
                 chmod +x "$CONFIG_FILE"
+                
+                # 如果当前别名不是"travbox"，需要更新
+                if [ "$current_alias" != "travbox" ]; then
+                    # 移除旧的别名
+                    if grep -q "alias $current_alias=" "$BASHRC_FILE" 2>/dev/null; then
+                        sed -i "/alias $current_alias=/d" "$BASHRC_FILE" 2>/dev/null
+                    fi
+                    
+                    # 更新FRAMEWORK_ALIAS变量
+                    FRAMEWORK_ALIAS="travbox"
+                    
+                    # 更新别名
+                    ensure_framework_alias
+                fi
                 
                 print_success "配置已重置为默认值"
             fi
