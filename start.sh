@@ -45,10 +45,10 @@ print_title() {
 }
 
 # 打印信息、成功、警告和错误消息
-print_info() { echo -e "${BLUE}[信息]${RESET} \$1"; }
-print_success() { echo -e "${GREEN}[成功]${RESET} \$1"; }
-print_warning() { echo -e "${YELLOW}[警告]${RESET} \$1"; }
-print_error() { echo -e "${RED}[错误]${RESET} \$1"; }
+print_info() { echo -e "${BLUE}[信息]${RESET} $1"; }
+print_success() { echo -e "${GREEN}[成功]${RESET} $1"; }
+print_warning() { echo -e "${YELLOW}[警告]${RESET} $1"; }
+print_error() { echo -e "${RED}[错误]${RESET} $1"; }
 
 # 按键继续
 press_enter() {
@@ -67,7 +67,7 @@ init_framework() {
 
 # 确保框架别名存在
 ensure_framework_alias() {
-    local current_script="$(realpath "\$0")"
+    local current_script="$(realpath "$0")"
     local alias_name="travbox"
     
     # 检查别名是否已经存在
@@ -383,23 +383,23 @@ CONFIG_FILE="$CONFIG_FILE"
 BASHRC_FILE="$HOME/.bashrc"
 
 # 清理别名
-if [ -f "\$BASHRC_FILE" ]; then
+if [ -f "$BASHRC_FILE" ]; then
     # 移除travbox别名
-    sed -i '/alias travbox=/d' "\$BASHRC_FILE"
+    sed -i '/alias travbox=/d' "$BASHRC_FILE"
     
     # 移除所有插件别名行（以"# Traverse script alias:"标记的行）
-    sed -i '/# Traverse script alias:/d' "\$BASHRC_FILE"
+    sed -i '/# Traverse script alias:/d' "$BASHRC_FILE"
 fi
 
 # 删除框架目录
-rm -rf "\$SCRIPT_DIR"
+rm -rf "$SCRIPT_DIR"
 
 echo -e "\033[32m[成功]\033[0m Traverse Termux框架已成功卸载"
 echo ""
 echo "感谢您使用本框架！"
 
 # 删除临时脚本
-rm -f "\$0"
+rm -f "$0"
 EOF
     
     chmod +x "$temp_script"
@@ -411,7 +411,7 @@ EOF
 
 # 执行选定的脚本
 execute_script() {
-    local script="\$1"
+    local script="$1"
     
     if [ -f "$script" ] && [ -x "$script" ]; then
         print_info "执行插件: $(basename "$script")"
@@ -753,8 +753,8 @@ install_new_plugins() {
 
 # 创建脚本别名的内部函数
 create_script_alias_internal() {
-    local script_path="\$1"
-    local alias_name="\$2"
+    local script_path="$1"
+    local alias_name="$2"
     
     local abs_script_path=$(readlink -f "$script_path" 2>/dev/null || realpath "$script_path" 2>/dev/null || echo "$script_path")
     
@@ -770,7 +770,7 @@ create_script_alias_internal() {
 
 # 移除脚本别名
 remove_script_alias() {
-    local alias_name="\$1"
+    local alias_name="$1"
     
     # 从bashrc中移除别名
     sed -i "/alias $alias_name=/d" "$BASHRC_FILE" 2>/dev/null
