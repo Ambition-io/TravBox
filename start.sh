@@ -1,7 +1,7 @@
 #!/data/data/com.termux/files/usr/bin/bash
 
 # Traverse Termux集成脚本框架
-VERSION="1.0.4"
+VERSION="1.0.5"
 
 # 颜色定义
 RED="\033[31m"
@@ -12,7 +12,7 @@ CYAN="\033[36m"
 RESET="\033[0m"
 
 # 配置变量
-SCRIPT_DIR="$HOME/.travbox"
+SCRIPT_DIR="$HOME/travbox"
 SCRIPTS_DIR="$SCRIPT_DIR/scripts"
 CONFIG_FILE="$SCRIPT_DIR/config.sh"
 REPO_URL="https://github.com/Ambition-io/TravBox.git"
@@ -304,6 +304,9 @@ uninstall_extension() {
     print_title
     echo -e "${YELLOW}可卸载的插件:${RESET}"
     
+    # 确保目录变量已初始化
+    init_directories
+    
     local scripts=($(scan_installed_scripts))
     if [ ${#scripts[@]} -eq 0 ]; then
         print_warning "没有找到可卸载的插件"
@@ -336,23 +339,21 @@ uninstall_extension() {
         read -p "确定要卸载插件 '$script_name'? (y/n): " confirm
         if [[ "$confirm" =~ ^[Yy]$ ]]; then
             # 移除固定列表中的项目
-            local pinned_file="$SCRIPT_DIR/pinned/scripts.list"
-            if [ -f "$pinned_file" ]; then
-                grep -v "$script_path:" "$pinned_file" > "$pinned_file.tmp"
-                mv "$pinned_file.tmp" "$pinned_file"
+            if [ -f "$PINNED_FILE" ]; then
+                grep -v "$script_path:" "$PINNED_FILE" > "$PINNED_FILE.tmp"
+                mv "$PINNED_FILE.tmp" "$PINNED_FILE"
             fi
             
             # 移除快捷链接
-            local shortcuts_file="$SCRIPT_DIR/shortcuts/shortcuts.list"
-            if [ -f "$shortcuts_file" ]; then
+            if [ -f "$SHORTCUTS_FILE" ]; then
                 while IFS=: read -r shortcut_name script_link; do
                     if [[ "$script_link" == "$script_path" ]]; then
                         rm -f "$PREFIX/bin/$shortcut_name"
                     fi
-                done < "$shortcuts_file"
+                done < "$SHORTCUTS_FILE"
                 
-                grep -v ":$script_path$" "$shortcuts_file" > "$shortcuts_file.tmp"
-                mv "$shortcuts_file.tmp" "$shortcuts_file"
+                grep -v ":$script_path$" "$SHORTCUTS_FILE" > "$SHORTCUTS_FILE.tmp"
+                mv "$SHORTCUTS_FILE.tmp" "$SHORTCUTS_FILE"
             fi
             
             # 删除脚本文件
@@ -387,27 +388,35 @@ uninstall_framework() {
     # 创建临时脚本来完成卸载
     local temp_script="/data/data/com.termux/files/usr/tmp/uninstall_framework_$.sh"
     
-    cat > "$temp_script" << 'EOF'
+    # 使用变量，不使用硬编码路径
+    cat > "$temp_script" << EOF
 #!/data/data/com.termux/files/usr/bin/bash
 
-# 获取配置文件中的快捷名称
-SHORTCUT_NAME=$(grep -m 1 "^SHORTCUT_NAME=" "$HOME/.travbox/config.sh" | cut -d'"' -f2)
-if [ -z "$SHORTCUT_NAME" ]; then
+# 使用父脚本传递的配置变量
+SCRIPT_DIR="$SCRIPT_DIR"
+CONFIG_FILE="$CONFIG_FILE"
+SHORTCUT_NAME="$SHORTCUT_NAME"
+
+# 获取配置文件中的快捷名称（如果未设置）
+if [ -z "\$SHORTCUT_NAME" ] && [ -f "\$CONFIG_FILE" ]; then
+    SHORTCUT_NAME=\$(grep -m 1 "^SHORTCUT_NAME=" "\$CONFIG_FILE" | cut -d'"' -f2)
+fi
+if [ -z "\$SHORTCUT_NAME" ]; then
     SHORTCUT_NAME="travbox"
 fi
 
 # 清理符号链接
-rm -f "$PREFIX/bin/$SHORTCUT_NAME"
+rm -f "\$PREFIX/bin/\$SHORTCUT_NAME"
 
 # 删除框架目录
-rm -rf "$HOME/.travbox"
+rm -rf "\$SCRIPT_DIR"
 
 echo -e "\033[32m[成功]\033[0m Traverse Termux框架已成功卸载"
 echo ""
 echo "感谢您使用本框架！"
 
 # 删除临时脚本
-rm -f "$0"
+rm -f "\$0"
 EOF
     
     chmod +x "$temp_script"
@@ -467,7 +476,9 @@ show_version_info() {
     local script_count=$(find "$SCRIPTS_DIR" -type f -name "*.sh" | wc -l)
     echo "已安装插件: $script_count"
     
-    local pinned_file="$SCRIPT_DIR/pinned/scripts.list"
+    # 定义为局部变量并使用现有变量构建路径
+    local pinned_dir="$SCRIPT_DIR/pinned"
+    local pinned_file="$pinned_dir/scripts.list"
     if [ -f "$pinned_file" ]; then
         local pinned_count=$(wc -l < "$pinned_file")
         echo "已固定插件: $pinned_count"
@@ -475,8 +486,10 @@ show_version_info() {
         echo "已固定插件: 0"
     fi
     
-    if [ -f "$SCRIPT_DIR/.initialized" ]; then
-        local install_date=$(stat -c %y "$SCRIPT_DIR/.initialized" 2>/dev/null || stat -f "%Sm" "$SCRIPT_DIR/.initialized" 2>/dev/null)
+    # 改用变量路径
+    local init_file="$SCRIPT_DIR/.initialized"
+    if [ -f "$init_file" ]; then
+        local install_date=$(stat -c %y "$init_file" 2>/dev/null || stat -f "%Sm" "$init_file" 2>/dev/null)
         echo "安装日期: $install_date"
     fi
     
@@ -491,11 +504,10 @@ config_management() {
     echo "1) 修改仓库URL"
     echo "2) 恢复默认配置"
     echo "3) 自定义框架快捷名称"
-    echo "4) 切换隐藏/非隐藏安装位置"
     echo "0) 返回上一级菜单"
     echo ""
     
-    read -p "请选择 [0-4]: " choice
+    read -p "请选择 [0-3]: " choice
     
     case $choice in
         1)
@@ -552,11 +564,6 @@ EOF
             
             print_success "快捷名称已更新为: $new_name"
             ;;
-
-        4)
-            toggle_visibility
-            ;;
-
         0)
             return
             ;;
@@ -569,76 +576,28 @@ EOF
     press_enter
 }
 
-# 切换隐藏/非隐藏状态
-toggle_visibility() {
-    print_title
-    echo -e "${YELLOW}切换安装位置可见性:${RESET}"
-    
-    # 确定当前状态和目标状态
-    local current_location="$SCRIPT_DIR"
-    local is_hidden=true
-    local target_location=""
-    local status_text=""
-    
-    if [[ "$SCRIPT_DIR" == "$HOME/.travbox" ]]; then
-        is_hidden=true
-        target_location="$HOME/TravBox"
-        status_text="当前使用隐藏文件夹 ($HOME/.travbox)，将切换到可见文件夹"
-    else
-        is_hidden=false
-        target_location="$HOME/.travbox"
-        status_text="当前使用可见文件夹 ($SCRIPT_DIR)，将切换到隐藏文件夹"
-    fi
-    
-    echo "$status_text"
-    echo -e "${RED}警告: 此操作将移动框架文件并修改配置${RESET}"
-    echo ""
-    
-    read -p "确认要切换安装位置吗? (y/n): " confirm
-    if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
-        print_warning "操作已取消"
-        press_enter
-        return
-    fi
-    
-    # 检查目标位置是否已存在
-    if [ -d "$target_location" ]; then
-        print_error "目标位置 $target_location 已存在，无法切换"
-        print_warning "请先删除或重命名该目录"
-        press_enter
-        return
-    fi
-    
-    print_info "正在切换安装位置..."
-    
-    # 修改主脚本中的SCRIPT_DIR变量
-    local current_script="$(realpath "$0")"
-    if [[ "$is_hidden" == true ]]; then
-        # 从隐藏切换到可见
-        sed -i "s|SCRIPT_DIR=\"\$HOME/.travbox\"|SCRIPT_DIR=\"\$HOME/TravBox\"|g" "$current_script"
-    else
-        # 从可见切换到隐藏
-        sed -i "s|SCRIPT_DIR=\"\$HOME/TravBox\"|SCRIPT_DIR=\"\$HOME/.travbox\"|g" "$current_script"
-    fi
-    
-    # 移动目录
-    mv "$current_location" "$target_location"
-    
-    # 更新框架快捷链接
-    SCRIPT_DIR="$target_location"
-    update_framework_shortcut
-    
-    print_success "安装位置已成功切换到: $target_location"
-    print_info "请重新启动框架以应用所有更改"
-    
-    # 退出以确保所有更改生效
-    exit 0
-}
+# ==================== 新的插件管理功能 ====================
 
-# ==================== 插件管理功能 ====================
+# 定义常用目录变量以提高可维护性
+init_directories() {
+    # 主要目录
+    PINNED_DIR="$SCRIPT_DIR/pinned"
+    SHORTCUTS_DIR="$SCRIPT_DIR/shortcuts"
+    
+    # 文件路径
+    PINNED_FILE="$PINNED_DIR/scripts.list"
+    SHORTCUTS_FILE="$SHORTCUTS_DIR/shortcuts.list"
+    INITIALIZED_FILE="$SCRIPT_DIR/.initialized"
+    
+    # 创建必要的目录
+    mkdir -p "$PINNED_DIR" "$SHORTCUTS_DIR"
+}
 
 # 插件管理菜单
 plugin_management() {
+    # 初始化目录变量
+    init_directories
+    
     while true; do
         print_title
         echo -e "${YELLOW}插件管理:${RESET}"
@@ -863,16 +822,16 @@ cd "$(dirname "$abs_script_path")" && exec "./$(basename "$abs_script_path")" "\
 EOF
     chmod +x "$PREFIX/bin/$shortcut_name"
     
-    # 存储快捷方式信息
-    mkdir -p "$SCRIPT_DIR/shortcuts"
+    # 使用定义的变量路径
+    mkdir -p "$SHORTCUTS_DIR"
     
     # 如果快捷方式已存在，先移除旧条目
-    if [ -f "$SCRIPT_DIR/shortcuts/shortcuts.list" ]; then
-        grep -v "^$shortcut_name:" "$SCRIPT_DIR/shortcuts/shortcuts.list" > "$SCRIPT_DIR/shortcuts/shortcuts.list.tmp"
-        mv "$SCRIPT_DIR/shortcuts/shortcuts.list.tmp" "$SCRIPT_DIR/shortcuts/shortcuts.list"
+    if [ -f "$SHORTCUTS_FILE" ]; then
+        grep -v "^$shortcut_name:" "$SHORTCUTS_FILE" > "$SHORTCUTS_FILE.tmp"
+        mv "$SHORTCUTS_FILE.tmp" "$SHORTCUTS_FILE"
     fi
     
-    echo "$shortcut_name:$abs_script_path" >> "$SCRIPT_DIR/shortcuts/shortcuts.list"
+    echo "$shortcut_name:$abs_script_path" >> "$SHORTCUTS_FILE"
     
     print_success "快捷命令 '$shortcut_name' 已创建"
 }
@@ -908,8 +867,10 @@ view_shortcuts() {
     print_title
     echo -e "${YELLOW}现有快捷命令:${RESET}"
     
-    local shortcuts_file="$SCRIPT_DIR/shortcuts/shortcuts.list"
-    if [ ! -f "$shortcuts_file" ] || [ ! -s "$shortcuts_file" ]; then
+    # 确保目录变量已初始化
+    init_directories
+    
+    if [ ! -f "$SHORTCUTS_FILE" ] || [ ! -s "$SHORTCUTS_FILE" ]; then
         print_warning "没有找到快捷命令"
         press_enter
         return
@@ -922,7 +883,7 @@ view_shortcuts() {
             echo "$i) $shortcut_name -> $(basename "$script_path")"
             ((i++))
         fi
-    done < "$shortcuts_file"
+    done < "$SHORTCUTS_FILE"
     
     if [ $i -eq 1 ]; then
         print_warning "没有找到有效的快捷命令"
@@ -993,8 +954,10 @@ remove_shortcut() {
     print_title
     echo -e "${YELLOW}删除快捷命令:${RESET}"
     
-    local shortcuts_file="$SCRIPT_DIR/shortcuts/shortcuts.list"
-    if [ ! -f "$shortcuts_file" ] || [ ! -s "$shortcuts_file" ]; then
+    # 确保目录变量已初始化
+    init_directories
+    
+    if [ ! -f "$SHORTCUTS_FILE" ] || [ ! -s "$SHORTCUTS_FILE" ]; then
         print_warning "没有找到快捷命令"
         press_enter
         return
@@ -1009,7 +972,7 @@ remove_shortcut() {
             shortcut_map[$i]="$shortcut_name:$script_path"
             ((i++))
         fi
-    done < "$shortcuts_file"
+    done < "$SHORTCUTS_FILE"
     
     if [ $i -eq 1 ]; then
         print_warning "没有找到有效的快捷命令"
@@ -1034,8 +997,8 @@ remove_shortcut() {
             rm -f "$PREFIX/bin/$shortcut_name"
             
             # 从列表中移除
-            grep -v "^$shortcut_name:" "$shortcuts_file" > "$shortcuts_file.tmp"
-            mv "$shortcuts_file.tmp" "$shortcuts_file"
+            grep -v "^$shortcut_name:" "$SHORTCUTS_FILE" > "$SHORTCUTS_FILE.tmp"
+            mv "$SHORTCUTS_FILE.tmp" "$SHORTCUTS_FILE"
             
             print_success "快捷命令 '$shortcut_name' 已成功删除"
         else
@@ -1079,8 +1042,10 @@ view_pinned_plugins() {
     print_title
     echo -e "${YELLOW}已固定的插件:${RESET}"
     
-    local pinned_file="$SCRIPT_DIR/pinned/scripts.list"
-    if [ ! -f "$pinned_file" ] || [ ! -s "$pinned_file" ]; then
+    # 确保目录变量已初始化
+    init_directories
+    
+    if [ ! -f "$PINNED_FILE" ] || [ ! -s "$PINNED_FILE" ]; then
         print_warning "没有找到已固定的插件"
         press_enter
         return
@@ -1093,7 +1058,7 @@ view_pinned_plugins() {
             echo "$i) $display_name ($(basename "$script_path"))"
             ((i++))
         fi
-    done < "$pinned_file"
+    done < "$PINNED_FILE"
     
     if [ $i -eq 1 ]; then
         print_warning "没有找到有效的固定插件"
@@ -1107,6 +1072,9 @@ view_pinned_plugins() {
 add_pinned_plugin() {
     print_title
     echo -e "${YELLOW}添加固定插件到主页:${RESET}"
+    
+    # 确保目录变量已初始化
+    init_directories
     
     local scripts=($(scan_installed_scripts))
     if [ ${#scripts[@]} -eq 0 ]; then
@@ -1137,9 +1105,8 @@ add_pinned_plugin() {
         local script_name=$(basename "$script_path")
         
         # 检查是否已经固定
-        local pinned_file="$SCRIPT_DIR/pinned/scripts.list"
-        if [ -f "$pinned_file" ]; then
-            if grep -q "^$script_path:" "$pinned_file"; then
+        if [ -f "$PINNED_FILE" ]; then
+            if grep -q "^$script_path:" "$PINNED_FILE"; then
                 print_warning "该插件已经固定在主页"
                 press_enter
                 return
@@ -1151,8 +1118,8 @@ add_pinned_plugin() {
             display_name="$script_name"
         fi
         
-        mkdir -p "$SCRIPT_DIR/pinned"
-        echo "$script_path:$display_name" >> "$SCRIPT_DIR/pinned/scripts.list"
+        mkdir -p "$PINNED_DIR"
+        echo "$script_path:$display_name" >> "$PINNED_FILE"
         
         print_success "插件 '$script_name' 已成功固定到主页"
     else
@@ -1167,8 +1134,10 @@ remove_pinned_plugin() {
     print_title
     echo -e "${YELLOW}从主页移除固定插件:${RESET}"
     
-    local pinned_file="$SCRIPT_DIR/pinned/scripts.list"
-    if [ ! -f "$pinned_file" ] || [ ! -s "$pinned_file" ]; then
+    # 确保目录变量已初始化
+    init_directories
+    
+    if [ ! -f "$PINNED_FILE" ] || [ ! -s "$PINNED_FILE" ]; then
         print_warning "没有找到已固定的插件"
         press_enter
         return
@@ -1183,7 +1152,7 @@ remove_pinned_plugin() {
             pinned_map[$i]="$script_path:$display_name"
             ((i++))
         fi
-    done < "$pinned_file"
+    done < "$PINNED_FILE"
     
     if [ $i -eq 1 ]; then
         print_warning "没有找到有效的固定插件"
@@ -1202,8 +1171,8 @@ remove_pinned_plugin() {
         local entry="${pinned_map[$choice]}"
         
         # 从固定列表中删除条目
-        grep -v "^$entry$" "$pinned_file" > "$pinned_file.tmp"
-        mv "$pinned_file.tmp" "$pinned_file"
+        grep -v "^$entry$" "$PINNED_FILE" > "$PINNED_FILE.tmp"
+        mv "$PINNED_FILE.tmp" "$PINNED_FILE"
         
         # 提取显示名称以用于成功消息
         IFS=':' read -r script_path display_name <<< "$entry"
@@ -1218,6 +1187,9 @@ remove_pinned_plugin() {
 
 # 主菜单
 main_menu() {
+    # 初始化目录变量
+    init_directories
+    
     while true; do
         print_title
         echo -e "${CYAN}主菜单:${RESET}"
@@ -1230,10 +1202,9 @@ main_menu() {
         echo ""
         
         # 显示已固定的插件
-        local pinned_file="$SCRIPT_DIR/pinned/scripts.list"
         local pinned_count=0
         
-        if [ -f "$pinned_file" ] && [ -s "$pinned_file" ]; then
+        if [ -f "$PINNED_FILE" ] && [ -s "$PINNED_FILE" ]; then
             echo -e "${YELLOW}快速启动:${RESET}"
             
             while IFS=: read -r script_path display_name; do
@@ -1241,7 +1212,7 @@ main_menu() {
                     ((pinned_count++))
                     echo "$((pinned_count+5))) $display_name"
                 fi
-            done < "$pinned_file"
+            done < "$PINNED_FILE"
             
             if [ $pinned_count -gt 0 ]; then
                 echo ""
@@ -1264,7 +1235,7 @@ main_menu() {
             0) exit 0 ;;
             *)
                 # 检查是否选择了固定插件
-                if [ -f "$pinned_file" ] && [ -s "$pinned_file" ] && [ -n "$pinned_count" ]; then
+                if [ -f "$PINNED_FILE" ] && [ -s "$PINNED_FILE" ] && [ -n "$pinned_count" ]; then
                     local pinned_index=$((choice-5))
                     if [ $pinned_index -ge 1 ] && [ $pinned_index -le $pinned_count ]; then
                         local j=0
@@ -1276,7 +1247,7 @@ main_menu() {
                                     break
                                 fi
                             fi
-                        done < "$pinned_file"
+                        done < "$PINNED_FILE"
                         continue
                     fi
                 fi
@@ -1290,4 +1261,6 @@ main_menu() {
 
 # 主程序
 init_framework
+# 初始化目录变量
+init_directories
 main_menu
